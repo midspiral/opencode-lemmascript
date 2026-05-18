@@ -1,2 +1,3 @@
 packages/opencode/src/permission/evaluate.ts
+packages/opencode/src/permission/arity.ts
 packages/opencode/src/agent/subagent-permissions.ts --standard-libraries

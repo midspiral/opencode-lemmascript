@@ -1,4 +1,9 @@
-export function prefix(tokens: string[]) {
+//@ safe-slice
+
+export function prefix(tokens: string[]): string[] {
+  //@ ensures \result.length <= tokens.length
+  //@ ensures forall(i: nat, i < \result.length ==> \result[i] === tokens[i])
+  //@ ensures tokens.length === 0 ==> \result.length === 0
   for (let len = tokens.length; len > 0; len--) {
     const prefix = tokens.slice(0, len).join(" ")
     const arity = ARITY[prefix]
