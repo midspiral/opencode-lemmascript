@@ -18,7 +18,39 @@ function deriveSubagentSessionPermission(input: SubInput): seq<Rule>
   (((parentAgentDenies + Std.Collections.Seq.Filter((rule: Rule) => ((rule.permission == "external_directory") || (rule.action == "deny")), input.parentSessionPermission)) + (if canTodo then [] else [Rule("todowrite", "*", "deny")])) + (if canTask then [] else [Rule("task", "*", "deny")]))
 }
 
+// Recursive lemma proving the completeness direction of deny-inheritance. The
+// trick: both `deriveSubagentSessionPermission(input)` and the recursive call
+// `DenyInheritStep(smallerInput, i-1)` reference the same function symbol, so
+// Dafny's function-unfolding gives consistent access to the inline filter
+// lambda — no lambda-equality needed. Reveal Filter() lets the induction step
+// through Filter's structure.
+lemma DenyInheritStep(input: SubInput, pa: Info, i: nat)
+  requires input.parentAgent == Some(pa)
+  requires i < |pa.permission|
+  requires pa.permission[i].action == "deny"
+  requires pa.permission[i].permission == "edit"
+  ensures pa.permission[i] in deriveSubagentSessionPermission(input)
+  decreases |pa.permission|
+{
+  reveal Std.Collections.Seq.Filter();
+  if i > 0 {
+    var smallerPa := Info(pa.permission[1..]);
+    var smallerInput := SubInput(input.parentSessionPermission, Some(smallerPa), input.subagent);
+    DenyInheritStep(smallerInput, smallerPa, i - 1);
+  }
+}
+
 lemma deriveSubagentSessionPermission_ensures(input: SubInput)
   ensures forall j: nat :: ((j < |deriveSubagentSessionPermission(input)|) ==> !(((deriveSubagentSessionPermission(input)[j].permission == "edit") && (deriveSubagentSessionPermission(input)[j].action == "allow"))))
+  ensures (match input.parentAgent { case Some(i_input_parentAgent_val) => forall i: nat :: ((i < |i_input_parentAgent_val.permission|) ==> (i_input_parentAgent_val.permission[i].action == "deny") ==> (i_input_parentAgent_val.permission[i].permission == "edit") ==> exists j: nat :: ((j < |deriveSubagentSessionPermission(input)|) && (deriveSubagentSessionPermission(input)[j] == i_input_parentAgent_val.permission[i]))) case None => true })
 {
+  match input.parentAgent {
+    case None =>
+    case Some(pa) =>
+      forall i: nat | i < |pa.permission| && pa.permission[i].action == "deny" && pa.permission[i].permission == "edit"
+        ensures exists j: nat :: j < |deriveSubagentSessionPermission(input)| && deriveSubagentSessionPermission(input)[j] == pa.permission[i]
+      {
+        DenyInheritStep(input, pa, i);
+      }
+  }
 }

@@ -2,7 +2,7 @@
 
 Fork of [opencode-ai/opencode](https://github.com/opencode-ai/opencode) with two pieces of production permission-system logic verified in-place against the [LemmaScript](https://github.com/midspiral/LemmaScript) Dafny backend. The function bodies and signatures are untouched; everything is added through `//@` annotation comments.
 
-Two functions, seven verification conditions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback — see [Notes for LemmaScript](#notes-for-lemmascript). In scope: the access-control core; out of scope (for now): the runtime state machine sitting on top.
+Two functions, nine verification conditions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback — see [Notes for LemmaScript](#notes-for-lemmascript). In scope: the access-control core; out of scope (for now): the runtime state machine sitting on top.
 
 ## What's Verified
 
@@ -47,31 +47,44 @@ export function deriveSubagentSessionPermission(input: {
 }
 ```
 
-**Verified property (safety direction):**
+**Verified properties (both directions of deny inheritance):**
 
-- **No edit-allows in the output.** For all `j`, `\result[j]` is *not* a `{ permission: "edit", action: "allow" }` rule. The function can only emit denies (and `external_directory` rules from the session) for the `edit` permission; it never introduces an allow.
+- **Safety: no edit-allows in the output.** For all `j`, `\result[j]` is *not* a `{ permission: "edit", action: "allow" }` rule. The function can only emit denies (and `external_directory` rules from the session) for the `edit` permission; it never introduces an allow.
+- **Completeness: every parent edit-deny is preserved.** When `parentAgent` is defined, for every index `i` where `parentAgent.permission[i]` is an edit-deny, that exact rule appears somewhere in `\result`. The fix for #26514 doesn't just *avoid* introducing allows; it actively *carries forward* every relevant deny.
 
-This is the **safety consequence** of #26514's fix: even if the toolchain composes `deriveSubagentSessionPermission` with `evaluate`, no subagent can obtain an `edit`-allow through this function — there's nothing to override the parent's denies with.
+Together these close the loop on #26514 mechanically: parent edit-denies are in the output (completeness), and nothing else can override them (safety).
 
-3 VCs, 0 errors.
+5 VCs, 0 errors. Completeness requires a 10-line proof body in the `.dfy` file (a recursive helper plus its invocation under the `Some` branch); the safety direction discharges automatically.
 
-## What We Did *Not* Prove (and Why)
+## How the Completeness Direction Proves
 
-The natural strengthening — "every parent edit-deny appears in `\result`" (the **completeness direction** of deny inheritance) — was attempted and abandoned. The blocker:
+`deriveSubagentSessionPermission`'s body uses an inline `.filter(rule => rule.action === "deny" && rule.permission === "edit")` lambda. Dafny does *not* equate textually-identical anonymous lambdas — a helper lemma proving membership in `Filter(λ_in_helper, perm)` cannot transport its conclusion onto the `Filter(λ_in_function_body, perm)` inside the function. This wall blocks the obvious "invoke a separately-proved filter-membership helper" pattern; both existing LemmaScript case studies that use `Seq.Filter` ([collab-todo](https://github.com/midspiral/collab-todo-lemmascript), [mastra](https://github.com/midspiral/mastra-lemmascript)) work around it by stating only soundness-direction specs.
 
-**Dafny does not equate textually-identical anonymous lambdas.** A 5-line test confirms `Filter((x: int) => x > 0, s)` in a function body and `Filter((x: int) => x > 0, s)` in a proof evaluate to `Filter` applied to *different* function values, even with the same parameter name and body. A helper lemma proving membership in `Filter(λ_in_helper, perm)` therefore can't transport its conclusion onto the `Filter(λ_in_function_body, perm)` call inside `deriveSubagentSessionPermission`'s body — Dafny treats the two `Filter` applications as unrelated.
+The workaround that *does* go through: write the helper lemma to take *the same `input`* the main function takes, and recurse on the perm sequence's length by building a `smallerInput` with `parentAgent.permission[1..]`. Both the original and recursive `deriveSubagentSessionPermission(...)` calls reference the same function symbol, so Dafny's function-unfolding gives each invocation access to the same inline filter lambda — the lambda equality wall is never hit. `reveal Std.Collections.Seq.Filter()` lets Dafny step through Filter's structure inductively. The full proof in `subagent-permissions.dfy` is:
 
-The two existing LemmaScript case studies that use `Std.Collections.Seq.Filter` ([collab-todo](https://github.com/midspiral/collab-todo-lemmascript), [mastra](https://github.com/midspiral/mastra-lemmascript)) work around this by stating only **soundness-direction** specs (`x ∈ filter(p, s) ⟹ p(x)`), which is what `Std.Collections.Seq.Filter`'s stdlib `ensures` directly provides. Nothing in the corpus has proved completeness through a filter.
+```dafny
+lemma DenyInheritStep(input: SubInput, pa: Info, i: nat)
+  requires input.parentAgent == Some(pa)
+  requires i < |pa.permission|
+  requires pa.permission[i].action == "deny" && pa.permission[i].permission == "edit"
+  ensures pa.permission[i] in deriveSubagentSessionPermission(input)
+  decreases |pa.permission|
+{
+  reveal Std.Collections.Seq.Filter();
+  if i > 0 {
+    var smallerPa := Info(pa.permission[1..]);
+    var smallerInput := SubInput(input.parentSessionPermission, Some(smallerPa), input.subagent);
+    DenyInheritStep(smallerInput, smallerPa, i - 1);
+  }
+}
+```
 
-The clean LemmaScript-side fix is **lambda lifting** in `dafny-emit.ts`: emit each filter/some/every lambda as a top-level `predicate FilterPred_<fn>_<n>(...) { ... }` and replace the lambda at the call site with the predicate name. Then both the function body and any proof reference the same named symbol and the equality wall vanishes. Roughly 30–50 LOC. Not done in this case study; left as the next LS investment.
-
-The current spec on `deriveSubagentSessionPermission` captures the operationally critical half of #26514 (no edit-allow can be produced) but not the structural half (every parent edit-deny is preserved). Both halves together would close the loop end-to-end.
+This sidesteps the lambda-equality issue entirely — no LemmaScript-side lambda lifting needed.
 
 ## Caveats
 
 - **`Wildcard.match` is opaque.** Both `evaluate.ts`'s proofs are parametric over the matcher. They hold for any total `(string, string) → boolean`. The actual regex-based implementation in `util/wildcard.ts` is unverifiable in LemmaScript today (regex modeling is out of scope); but every theorem stated transfers unchanged if `Wildcard.match` is later replaced by a hand-written verifiable glob matcher.
 - **`Schema.X` typings don't expand through ts-morph.** opencode uses `Schema.Struct(...)` and `Schema.Schema.Type<typeof X>` pervasively. ts-morph (LemmaScript's frontend) sees these as `Type<any>` — the type-level computation doesn't get followed. `subagent-permissions.ts` works around this with four `//@ declare-type` shim lines that give LemmaScript a simplified view of `Rule`, `Info`, `Ruleset`, and the input-record shape.
-- **Subagent-permissions spec is a single direction.** See the section above.
 
 ## Setup
 
@@ -118,5 +131,5 @@ The case study drove these additions to LemmaScript itself:
 - **`inferLambdaParamTypes` not applied in `optChain` call steps.** A lambda buried inside `obj?.filter(r => ...)` got `int`-typed params instead of the array's element type, breaking the deny-inheritance proof until fixed. (`resolve.ts`)
 
 **Pending (not done):**
-- **Lambda lifting for filter predicates.** Would unblock the completeness direction of the deny-inheritance theorem (see [What We Did Not Prove](#what-we-did-not-prove-and-why)).
 - **Schema-aware extraction.** Would remove the need for `//@ declare-type` shims when the upstream types are Schema-derived. Likely 200–300 LOC; not strictly necessary given the shim workaround.
+- **Lambda lifting for filter predicates.** Initially thought necessary for the completeness direction of deny-inheritance, but the recursive-helper-with-same-function-symbol pattern (see [How the Completeness Direction Proves](#how-the-completeness-direction-proves)) sidesteps the lambda-equality wall without any LS-side change. Lambda lifting would let auto-discharge replace the manual 10-line proof body in cases where the lifted predicate has no free variables; nice-to-have but not blocking.
