@@ -1,6 +1,6 @@
 # opencode — Verified with LemmaScript
 
-Fork of [opencode-ai/opencode](https://github.com/opencode-ai/opencode) applying [LemmaScript](https://github.com/midspiral/LemmaScript)'s Dafny backend to opencode's permission system. Annotations are added in-place — function bodies and signatures stay unchanged; everything goes through `//@` comments. Work in progress.
+Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) applying [LemmaScript](https://github.com/midspiral/LemmaScript)'s Dafny backend to opencode's permission system. Annotations are added in-place — function bodies and signatures stay unchanged; everything goes through `//@` comments. Work in progress.
 
 Currently verified: three functions, nineteen verification conditions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice — see [Notes for LemmaScript](#notes-for-lemmascript).
 
