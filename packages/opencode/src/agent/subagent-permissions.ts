@@ -1,6 +1,12 @@
 import type { Permission } from "../permission"
 import type { Agent } from "./agent"
 
+// LS shims: simplified shapes ts-morph can't recover from Schema generics.
+//@ declare-type Rule { permission: string, pattern: string, action: string }
+//@ declare-type Info { permission: Rule[] }
+//@ declare-type Ruleset = Rule[]
+//@ declare-type SubInput { parentSessionPermission: Rule[], parentAgent: Info | undefined, subagent: Info }
+
 /**
  * Build the `permission` ruleset for a subagent's session when it's spawned
  * via the task tool. Combines:
@@ -19,6 +25,8 @@ export function deriveSubagentSessionPermission(input: {
   parentAgent: Agent.Info | undefined
   subagent: Agent.Info
 }): Permission.Ruleset {
+  //@ type input SubInput
+  //@ ensures forall(j: nat, j < \result.length ==> !(\result[j].permission === "edit" && \result[j].action === "allow"))
   const canTask = input.subagent.permission.some((rule) => rule.permission === "task")
   const canTodo = input.subagent.permission.some((rule) => rule.permission === "todowrite")
   const parentAgentDenies =
