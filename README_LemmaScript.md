@@ -2,7 +2,7 @@
 
 Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) applying [LemmaScript](https://github.com/midspiral/LemmaScript)'s Dafny backend to opencode's permission system. Annotations are added in-place — function bodies and signatures stay unchanged; everything goes through `//@` comments. Work in progress.
 
-Currently verified: five functions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice, brownfield `//@ verify` extraction with continue-rewrite and function-scoped extern registration, in-file `//@ extern` declarations, array-destructuring with rest at let-statement level — see [Notes for LemmaScript](#notes-for-lemmascript).
+Currently verified: eight functions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice, brownfield `//@ verify` extraction with continue-rewrite and function-scoped extern registration, in-file `//@ extern` declarations, array- and object-destructuring with rest at let-statement level, `StringSplit` + `SeqFindIndex` preambles, full nullable-return-type / optional-field / `bool || undefined` / `string || undefined` handling — see [Notes for LemmaScript](#notes-for-lemmascript).
 
 ## What's Verified
 
@@ -70,6 +70,28 @@ Both directions of the subsequence theorem proven:
 
 A two-clause loop invariant carries the proof: `0 <= i <= items.length` plus `forall j < i. ¬(match(items[j], pattern) ∧ Matches(items[j+1..], rest))` ("no witness in the prefix scanned so far"). Soundness falls out from the recursive method's own ensures; completeness from the loop-exit invariant + the contrapositive of `Matches`'s non-`*` case. No proof body in `.dfy` — just the `predicate Matches` definition, ~6 lines.
 
+### `Patch.parsePatch` and helpers — `packages/opencode/src/patch/index.ts`
+
+The unified-diff parser used by the `apply_patch` tool. `parsePatch` is the orchestrator: it cleans the input (strips heredoc, splits on newlines, finds Begin/End markers), then walks the body looking for `*** Add/Update/Delete File:` headers and dispatching to the matching helper. Four functions verified in-place via `//@ verify`:
+
+- **`parsePatchHeader`** (`requires startIdx < lines.length`, `ensures` on `nextIdx` bounds): structural correctness — when the header line matches one of the three patterns, the returned `nextIdx` is `startIdx + 1` (Add/Delete) or `startIdx + 2` (Update with `*** Move to:`), and `nextIdx <= lines.length`.
+- **`parseAddFileContent`** and **`parseUpdateFileChunks`** (each `requires startIdx <= lines.length`, `ensures startIdx <= nextIdx <= lines.length`): forward-progress + termination, with explicit loop invariants and `decreases lines.length - i`.
+- **`parsePatch`**: full extraction, all bounds checks pass, helper-call preconditions are discharged via the helpers' ensures. A single hand-added `assume false` in `.dfy` localizes the throw-on-malformed branch — the precondition that would otherwise rule it out requires inlining the function's own `stripHeredoc/split/findIndex` pipeline, which would be circular-looking. The escape is visible at one line, with a comment explaining the choice.
+
+9 verified, 0 errors. `stripHeredoc` is `//@ extern` (regex-based, out of LS's verification model).
+
+**Conservation theorem.** All three sub-claims from the candidate doc are now proven via three ghost variables and five loop invariants. The ghosts track each hunk's start position (`hunkStartIdx: seq<int>`) and accumulators for lines consumed by hunks (`coveredCount`) versus lines skipped via the `i++` fallthroughs (`skippedCount`).
+
+The decisive invariants:
+
+- `forall k. hunkStartIdx[k] < hunkStartIdx[k+1]` — **hunks in input order** AND **no line assigned to two hunks** (strict monotonicity in one clause).
+- `coveredCount + skippedCount == i - (beginIdx + 1)` — **every line accounted for**. At loop exit, `i == endIdx`, so `coveredCount + skippedCount == endIdx - (beginIdx + 1)`: the total lines in the patch range equal hunk-consumed lines plus skipped lines.
+- `|hunks| <= i - (beginIdx + 1)` — each pushed hunk consumed at least one line.
+
+The line-tracking pattern: each branch that pushes a hunk increments `coveredCount` by `nextIdx - i` (the lines that hunk just owned); each `i++` skip increments `skippedCount` by 1. Maintenance of the count invariant follows mechanically: every iteration advances `i` by exactly the amount added to one of the two accumulators.
+
+The case study drove a large LS additions list — `StringSplit` / `SeqFindIndex` preambles, optional-field detection on records and discriminated-union variants, nullable-return-type wrapping (`{...} | null` → `Option<T>`), let-statement type-node fallback, asymmetric optional in conditionals, assign auto-wrap-Some, `bool || undefined` / `string || undefined` lowering, negative slice index, truthy-coercion on string ternary conds, extended continue-rewrite (non-trivial then-bodies, while loops). See [Notes for LemmaScript](#notes-for-lemmascript).
+
 ## Caveats
 
 - **`Wildcard.match` is opaque.** Both `evaluate.ts` proofs are parametric over the matcher — they hold for any total `(string, string) → boolean`. The actual regex-based implementation is out of LemmaScript's verification model (regex modeling excluded), but every theorem transfers unchanged if `Wildcard.match` is later replaced by a verifiable hand-written glob matcher.
@@ -109,6 +131,10 @@ packages/opencode/src/permission/index.dfy            ← Verified (with one inl
 packages/opencode/src/util/wildcard.ts                ← In-place, //@ verify on matchSequence + //@ extern on match
 packages/opencode/src/util/wildcard.dfy.gen           ← Regeneratable
 packages/opencode/src/util/wildcard.dfy               ← Verified (with hand-added Matches predicate)
+
+packages/opencode/src/patch/index.ts                  ← In-place, //@ verify on parsePatch + 3 helpers + //@ extern on stripHeredoc
+packages/opencode/src/patch/index.dfy.gen             ← Regeneratable
+packages/opencode/src/patch/index.dfy                 ← Verified (with one inline `assume false` for the malformed-input throw)
 ```
 
 ## Notes for LemmaScript

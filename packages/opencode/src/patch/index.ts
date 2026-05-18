@@ -70,10 +70,15 @@ export enum MaybeApplyPatchVerified {
 }
 
 // Parser implementation
+//@ verify
 function parsePatchHeader(
   lines: string[],
   startIdx: number,
 ): { filePath: string; movePath?: string; nextIdx: number } | null {
+  //@ requires 0 <= startIdx && startIdx < lines.length
+  //@ ensures \result !== undefined ==> \result.nextIdx >= startIdx + 1
+  //@ ensures \result !== undefined ==> \result.nextIdx <= startIdx + 2
+  //@ ensures \result !== undefined ==> \result.nextIdx <= lines.length
   const line = lines[startIdx]
 
   if (line.startsWith("*** Add File:")) {
@@ -103,11 +108,16 @@ function parsePatchHeader(
   return null
 }
 
+//@ verify
 function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: UpdateFileChunk[]; nextIdx: number } {
+  //@ requires 0 <= startIdx && startIdx <= lines.length
+  //@ ensures startIdx <= \result.nextIdx && \result.nextIdx <= lines.length
   const chunks: UpdateFileChunk[] = []
   let i = startIdx
 
   while (i < lines.length && !lines[i].startsWith("***")) {
+    //@ invariant startIdx <= i && i <= lines.length
+    //@ decreases lines.length - i
     if (lines[i].startsWith("@@")) {
       // Parse context line
       const contextLine = lines[i].substring(2).trim()
@@ -119,6 +129,8 @@ function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: Upd
 
       // Parse change lines
       while (i < lines.length && !lines[i].startsWith("@@") && !lines[i].startsWith("***")) {
+        //@ invariant 0 <= i && i <= lines.length
+        //@ decreases lines.length - i
         const changeLine = lines[i]
 
         if (changeLine === "*** End of File") {
@@ -157,11 +169,16 @@ function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: Upd
   return { chunks, nextIdx: i }
 }
 
+//@ verify
 function parseAddFileContent(lines: string[], startIdx: number): { content: string; nextIdx: number } {
+  //@ requires 0 <= startIdx && startIdx <= lines.length
+  //@ ensures startIdx <= \result.nextIdx && \result.nextIdx <= lines.length
   let content = ""
   let i = startIdx
 
   while (i < lines.length && !lines[i].startsWith("***")) {
+    //@ invariant startIdx <= i && i <= lines.length
+    //@ decreases lines.length - i
     if (lines[i].startsWith("+")) {
       content += lines[i].substring(1) + "\n"
     }
@@ -176,6 +193,7 @@ function parseAddFileContent(lines: string[], startIdx: number): { content: stri
   return { content, nextIdx: i }
 }
 
+//@ extern
 function stripHeredoc(input: string): string {
   // Match heredoc patterns like: cat <<'EOF'\n...\nEOF or <<EOF\n...\nEOF
   const heredocMatch = input.match(/^(?:cat\s+)?<<['"]?(\w+)['"]?\s*\n([\s\S]*?)\n\1\s*$/)
@@ -185,7 +203,9 @@ function stripHeredoc(input: string): string {
   return input
 }
 
+//@ verify
 export function parsePatch(patchText: string): { hunks: Hunk[] } {
+  //@ requires patchText.length >= 0
   const cleaned = stripHeredoc(patchText.trim())
   const lines = cleaned.split("\n")
   const hunks: Hunk[] = []
@@ -205,15 +225,29 @@ export function parsePatch(patchText: string): { hunks: Hunk[] } {
   // Parse content between markers
   i = beginIdx + 1
 
+  //@ ghost let hunkStartIdx: number[] = []
+  //@ ghost let coveredCount: number = 0
+  //@ ghost let skippedCount: number = 0
   while (i < endIdx) {
+    //@ invariant beginIdx + 1 <= i && i <= lines.length
+    //@ invariant endIdx < lines.length
+    //@ invariant hunkStartIdx.length === hunks.length
+    //@ invariant hunks.length <= i - (beginIdx + 1)
+    //@ invariant forall(k: nat, k < hunkStartIdx.length ==> beginIdx + 1 <= hunkStartIdx[k] && hunkStartIdx[k] < i)
+    //@ invariant forall(k: nat, k + 1 < hunkStartIdx.length ==> hunkStartIdx[k] < hunkStartIdx[k + 1])
+    //@ invariant coveredCount + skippedCount === i - (beginIdx + 1)
+    //@ decreases lines.length - i
     const header = parsePatchHeader(lines, i)
     if (!header) {
+      //@ ghost skippedCount = skippedCount + 1
       i++
       continue
     }
 
     if (lines[i].startsWith("*** Add File:")) {
       const { content, nextIdx } = parseAddFileContent(lines, header.nextIdx)
+      //@ ghost hunkStartIdx = hunkStartIdx.concat(i)
+      //@ ghost coveredCount = coveredCount + (nextIdx - i)
       hunks.push({
         type: "add",
         path: header.filePath,
@@ -221,6 +255,8 @@ export function parsePatch(patchText: string): { hunks: Hunk[] } {
       })
       i = nextIdx
     } else if (lines[i].startsWith("*** Delete File:")) {
+      //@ ghost hunkStartIdx = hunkStartIdx.concat(i)
+      //@ ghost coveredCount = coveredCount + (header.nextIdx - i)
       hunks.push({
         type: "delete",
         path: header.filePath,
@@ -228,6 +264,8 @@ export function parsePatch(patchText: string): { hunks: Hunk[] } {
       i = header.nextIdx
     } else if (lines[i].startsWith("*** Update File:")) {
       const { chunks, nextIdx } = parseUpdateFileChunks(lines, header.nextIdx)
+      //@ ghost hunkStartIdx = hunkStartIdx.concat(i)
+      //@ ghost coveredCount = coveredCount + (nextIdx - i)
       hunks.push({
         type: "update",
         path: header.filePath,
@@ -236,6 +274,7 @@ export function parsePatch(patchText: string): { hunks: Hunk[] } {
       })
       i = nextIdx
     } else {
+      //@ ghost skippedCount = skippedCount + 1
       i++
     }
   }
