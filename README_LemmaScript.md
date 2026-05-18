@@ -2,7 +2,7 @@
 
 Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) applying [LemmaScript](https://github.com/midspiral/LemmaScript)'s Dafny backend to opencode's permission system. Annotations are added in-place — function bodies and signatures stay unchanged; everything goes through `//@` comments. Work in progress.
 
-Currently verified: three functions, nineteen verification conditions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice — see [Notes for LemmaScript](#notes-for-lemmascript).
+Currently verified: four functions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice, brownfield `//@ verify` extraction with continue-rewrite and function-scoped extern registration — see [Notes for LemmaScript](#notes-for-lemmascript).
 
 ## What's Verified
 
@@ -48,6 +48,17 @@ The lemma proves the property about a Dafny *mirror function* `longestMatchPrefi
 
 10 VCs, 0 errors. The body is a decrementing C-style `for` loop over prefix lengths; LS desugars it to a `while` automatically.
 
+### `Permission.disabled` — `packages/opencode/src/permission/index.ts`
+
+The "which input tools have a wildcard-deny rule" check used to gate the tool list. For each `tool`, collapses edit-class tools (`edit` / `write` / `apply_patch`) to a single `"edit"` permission, finds the last rule whose `permission` field matches via `Wildcard.match`, and emits the tool iff that last rule has `pattern === "*"` and `action === "deny"`. Annotated in-place inside `permission/index.ts` — the big `Layer.effect`/`Effect.gen` service file — using LS's brownfield `//@ verify` extraction so the surrounding state machine is bypassed.
+
+Both directions of the deny-characterization proven, parametric over `Wildcard.match`:
+
+- **Necessary.** If `tool ∈ \result`, then there exists a maximal-index rule in `ruleset` matching `permission(tool)` with `pattern === "*"` and `action === "deny"`.
+- **Sufficient.** If such a maximal matching deny rule exists for some `tools[i]`, then `tools[i] ∈ \result`.
+
+Three `//@ invariant` clauses on the `for (const tool of tools)` loop carry the proof: a strengthened soundness invariant `t ∈ result ⟹ ∃ j < _tool_idx. tools[j] === t` (so prior-iteration witnesses transfer across same-string duplicates), plus both directions of the deny-witness restricted to `j < _tool_idx`. A single hand-added `assert` in `.dfy` names the `SeqFindLast` witness inside the `*`-deny branch, letting Dafny discharge the necessary-direction maintenance.
+
 ## Caveats
 
 - **`Wildcard.match` is opaque.** Both `evaluate.ts` proofs are parametric over the matcher — they hold for any total `(string, string) → boolean`. The actual regex-based implementation is out of LemmaScript's verification model (regex modeling excluded), but every theorem transfers unchanged if `Wildcard.match` is later replaced by a verifiable hand-written glob matcher.
@@ -79,6 +90,10 @@ packages/opencode/src/permission/arity.dfy            ← Verified (with longest
 packages/opencode/src/agent/subagent-permissions.ts       ← In-place, 2 ensures + 4 declare-type shims
 packages/opencode/src/agent/subagent-permissions.dfy.gen  ← Regeneratable
 packages/opencode/src/agent/subagent-permissions.dfy      ← Verified (with 10-line manual proof addition)
+
+packages/opencode/src/permission/index.ts             ← In-place, //@ verify on disabled (2 shims, 3 ensures, 3 invariants)
+packages/opencode/src/permission/index.dfy.gen        ← Regeneratable
+packages/opencode/src/permission/index.dfy            ← Verified (with one inline assert hint)
 ```
 
 ## Notes for LemmaScript
@@ -98,6 +113,7 @@ The case study drove these additions to LemmaScript itself:
 - **C-style `for (let i = N; cond; i++/i--/i += k)` loops** desugared to `while` at extract time; counter is treated as mutable; pre/postfix `++`/`--` and `+=`/`-=` rewritten to assignments.
 - **Map literals from typed record literals.** `const X: Record<string, V> = { a: 1, b: 2 }` emits as Dafny's flat `map[a := 1, b := 2]` (the chained-`set` form trips Dafny's type resolver on large dictionaries — the `ARITY` 160-entry case study forced this).
 - **JS-safe `Array.prototype.slice(lo, hi)`** via a `SafeSlice` preamble that clamps both bounds to `[0, |s|]`, matching JS's permissive semantics instead of Dafny's strict `0 <= lo <= hi <= |s|`.
+- **Brownfield `//@ verify` extraction on Effect-heavy files.** `permission/index.ts` carries a `Layer.effect(Effect.gen ...)` service, schema decls, and runtime constants that `lsc` can't model. Marking a single function with `//@ verify` makes lsc extract only that function, skipping everything else with warnings. Two narrow fixes made this work for `disabled`: (a) rewriting `if (X) continue; rest` to `if (!X) { rest }` in for-of bodies — and the post-narrow `match`/Some/None form where `continue` lands in the None arm — so Dafny's while-with-bottom-increment doesn't infinite-loop; (b) scoping auto-extern registration to function-body extraction, so module-level constants like `Event = { Asked: BusEvent.define(...) }` don't pollute the output with un-Dafny-parseable externs. Both fixes are conservative — they cover the patterns `disabled` produces, not the general continue/extern problem.
 
 **Bug fixes uncovered along the way:**
 - **Record literal emission was field-position-order, not struct-order.** `{ action: "ask", permission, pattern: "*" }` was emitting as `Rule("ask", permission, "*")` against a `Rule(permission, pattern, action)` declaration — silently misassigning all three fields. Exposed by `evaluate.ts`'s `None`-branch default.
