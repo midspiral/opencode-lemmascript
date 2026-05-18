@@ -1,7 +1,5 @@
 import { Wildcard } from "@/util/wildcard"
 
-//@ extern Wildcard.match: (string, string) -> boolean
-
 type Rule = {
   permission: string
   pattern: string

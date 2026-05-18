@@ -23,7 +23,7 @@ function SeqFlatten<T>(s: seq<seq<T>>): seq<T>
   else s[0] + SeqFlatten(s[1..])
 }
 
-function {:axiom} Wildcard_match(a0: string, a1: string): bool
+function {:axiom} Wildcard_match(str: string, pattern: string): bool
 
 datatype Rule = Rule(permission: string, pattern: string, action: string)
 
