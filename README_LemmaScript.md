@@ -2,7 +2,7 @@
 
 Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) applying [LemmaScript](https://github.com/midspiral/LemmaScript)'s Dafny backend to opencode's permission system. Annotations are added in-place — function bodies and signatures stay unchanged; everything goes through `//@` comments. Work in progress.
 
-Currently verified: eight functions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice, brownfield `//@ verify` extraction with continue-rewrite and function-scoped extern registration, in-file `//@ extern` declarations, array- and object-destructuring with rest at let-statement level, `StringSplit` + `SeqFindIndex` preambles, full nullable-return-type / optional-field / `bool || undefined` / `string || undefined` handling — see [Notes for LemmaScript](#notes-for-lemmascript).
+Currently verified: nine functions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice, brownfield `//@ verify` extraction with continue-rewrite and function-scoped extern registration, in-file `//@ extern` declarations, array- and object-destructuring with rest at let-statement level, `StringSplit` + `SeqFindIndex` preambles, full nullable-return-type / optional-field / `bool || undefined` / `string || undefined` handling — see [Notes for LemmaScript](#notes-for-lemmascript).
 
 ## What's Verified
 
@@ -78,7 +78,7 @@ The unified-diff parser used by the `apply_patch` tool. `parsePatch` is the orch
 - **`parseAddFileContent`** and **`parseUpdateFileChunks`** (each `requires startIdx <= lines.length`, `ensures startIdx <= nextIdx <= lines.length`): forward-progress + termination, with explicit loop invariants and `decreases lines.length - i`.
 - **`parsePatch`**: full extraction, all bounds checks pass, helper-call preconditions are discharged via the helpers' ensures. A single hand-added `assume false` in `.dfy` localizes the throw-on-malformed branch — the precondition that would otherwise rule it out requires inlining the function's own `stripHeredoc/split/findIndex` pipeline, which would be circular-looking. The escape is visible at one line, with a comment explaining the choice.
 
-9 verified, 0 errors. `stripHeredoc` is `//@ extern` (regex-based, out of LS's verification model).
+All four extract and verify (Dafny reports 9 procedures verified for the file, counting the SeqFindIndex/SeqFindLast/StringTrim/StringSplit preambles alongside the four method bodies). `stripHeredoc` is `//@ extern` (regex-based, out of LS's verification model).
 
 **Conservation theorem.** All three sub-claims from the candidate doc are now proven via three ghost variables and five loop invariants. The ghosts track each hunk's start position (`hunkStartIdx: seq<int>`) and accumulators for lines consumed by hunks (`coveredCount`) versus lines skipped via the `i++` fallthroughs (`skippedCount`).
 
