@@ -2,7 +2,7 @@
 
 Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) applying [LemmaScript](https://github.com/midspiral/LemmaScript)'s Dafny backend to opencode's permission system. Annotations are added in-place — function bodies and signatures stay unchanged; everything goes through `//@` comments. Work in progress.
 
-Currently verified: four functions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice, brownfield `//@ verify` extraction with continue-rewrite and function-scoped extern registration — see [Notes for LemmaScript](#notes-for-lemmascript).
+Currently verified: five functions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice, brownfield `//@ verify` extraction with continue-rewrite and function-scoped extern registration, in-file `//@ extern` declarations, array-destructuring with rest at let-statement level — see [Notes for LemmaScript](#notes-for-lemmascript).
 
 ## What's Verified
 
@@ -59,6 +59,17 @@ Both directions of the deny-characterization proven, parametric over `Wildcard.m
 
 Three `//@ invariant` clauses on the `for (const tool of tools)` loop carry the proof: a strengthened soundness invariant `t ∈ result ⟹ ∃ j < _tool_idx. tools[j] === t` (so prior-iteration witnesses transfer across same-string duplicates), plus both directions of the deny-witness restricted to `j < _tool_idx`. A single hand-added `assert` in `.dfy` names the `SeqFindLast` witness inside the `*`-deny branch, letting Dafny discharge the necessary-direction maintenance.
 
+### `Wildcard.matchSequence` — `packages/opencode/src/util/wildcard.ts`
+
+A pure subsequence matcher used by `allStructured` for structured permission matching (`bash:git stash pop` etc.). Recurses over `patterns`; `*` is a no-op pattern position (skips itself, consumes no item); a non-`*` pattern is consumed by some item, with subsequent matches required to come from later in the items sequence. Annotated in-place; `match` itself is opted out of verification via `//@ extern` (it constructs a `RegExp` — out of LS's verification model), and `matchSequence` is proven parametric over the resulting uninterpreted predicate.
+
+Both directions of the subsequence theorem proven:
+
+- **Soundness.** `matchSequence(items, patterns) === true ⟹ Matches(items, patterns)`, where `Matches` is the hand-added Dafny predicate that recursively existentially-quantifies a strictly-increasing index assignment for non-`*` patterns.
+- **Completeness.** `Matches(items, patterns) ⟹ matchSequence(items, patterns) === true`.
+
+A two-clause loop invariant carries the proof: `0 <= i <= items.length` plus `forall j < i. ¬(match(items[j], pattern) ∧ Matches(items[j+1..], rest))` ("no witness in the prefix scanned so far"). Soundness falls out from the recursive method's own ensures; completeness from the loop-exit invariant + the contrapositive of `Matches`'s non-`*` case. No proof body in `.dfy` — just the `predicate Matches` definition, ~6 lines.
+
 ## Caveats
 
 - **`Wildcard.match` is opaque.** Both `evaluate.ts` proofs are parametric over the matcher — they hold for any total `(string, string) → boolean`. The actual regex-based implementation is out of LemmaScript's verification model (regex modeling excluded), but every theorem transfers unchanged if `Wildcard.match` is later replaced by a verifiable hand-written glob matcher.
@@ -94,6 +105,10 @@ packages/opencode/src/agent/subagent-permissions.dfy      ← Verified (with 10-
 packages/opencode/src/permission/index.ts             ← In-place, //@ verify on disabled (2 shims, 3 ensures, 3 invariants)
 packages/opencode/src/permission/index.dfy.gen        ← Regeneratable
 packages/opencode/src/permission/index.dfy            ← Verified (with one inline assert hint)
+
+packages/opencode/src/util/wildcard.ts                ← In-place, //@ verify on matchSequence + //@ extern on match
+packages/opencode/src/util/wildcard.dfy.gen           ← Regeneratable
+packages/opencode/src/util/wildcard.dfy               ← Verified (with hand-added Matches predicate)
 ```
 
 ## Notes for LemmaScript
@@ -113,6 +128,8 @@ The case study drove these additions to LemmaScript itself:
 - **C-style `for (let i = N; cond; i++/i--/i += k)` loops** desugared to `while` at extract time; counter is treated as mutable; pre/postfix `++`/`--` and `+=`/`-=` rewritten to assignments.
 - **Map literals from typed record literals.** `const X: Record<string, V> = { a: 1, b: 2 }` emits as Dafny's flat `map[a := 1, b := 2]` (the chained-`set` form trips Dafny's type resolver on large dictionaries — the `ARITY` 160-entry case study forced this).
 - **JS-safe `Array.prototype.slice(lo, hi)`** via a `SafeSlice` preamble that clamps both bounds to `[0, |s|]`, matching JS's permissive semantics instead of Dafny's strict `0 <= lo <= hi <= |s|`.
+- **In-file `//@ extern` on a function declaration.** Marks a same-file function as a body-less axiom (signature + any `//@ requires`/`//@ ensures` only; body skipped). Parallel to the existing auto-extern for cross-file calls, registered in the same externs map, emitted the same way (`function {:axiom} foo(...)`). Use case: `Wildcard.match` is regex-based — outside LS's verification model — but `matchSequence`'s proof needs `match` to be a deterministic-but-uninterpreted predicate. `//@ extern` on `match` gives exactly that without refactoring it into a separate file. `escapeName` is now applied to extern names so Dafny-keyword collisions (`match`) resolve consistently between declaration and call sites.
+- **Array destructuring with rest at let-statement level.** `const [a, , c, ...rest] = arr` desugars to individual bindings: `var a := arr[0]; var c := arr[2]; var rest := arr[3..]`. Omitted slots (`,,`) skip; rest emits as a `slice`. Single-eval temp introduced if the initializer isn't a bare variable. Nested binding patterns throw a clear error — extend when a case study hits them.
 - **Brownfield `//@ verify` extraction on Effect-heavy files.** `permission/index.ts` carries a `Layer.effect(Effect.gen ...)` service, schema decls, and runtime constants that `lsc` can't model. Marking a single function with `//@ verify` makes lsc extract only that function, skipping everything else with warnings. Two narrow fixes made this work for `disabled`: (a) rewriting `if (X) continue; rest` to `if (!X) { rest }` in for-of bodies — and the post-narrow `match`/Some/None form where `continue` lands in the None arm — so Dafny's while-with-bottom-increment doesn't infinite-loop; (b) scoping auto-extern registration to function-body extraction, so module-level constants like `Event = { Asked: BusEvent.define(...) }` don't pollute the output with un-Dafny-parseable externs. Both fixes are conservative — they cover the patterns `disabled` produces, not the general continue/extern problem.
 
 **Bug fixes uncovered along the way:**
