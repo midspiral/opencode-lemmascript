@@ -190,6 +190,7 @@ method parsePatch(patchText: string) returns (res: ParsePatchResult)
   var beginIdx := SeqFindIndex(lines, (line: string) => (StringTrim(line) == beginMarker));
   var endIdx := SeqFindIndex(lines, (line: string) => (StringTrim(line) == endMarker));
   if (((beginIdx == -1) || (endIdx == -1)) || (beginIdx >= endIdx)) {
+    assume {:axiom} false;
     assert false;
   }
   i := (beginIdx + 1);

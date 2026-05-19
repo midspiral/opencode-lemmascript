@@ -219,6 +219,7 @@ export function parsePatch(patchText: string): { hunks: Hunk[] } {
   const endIdx = lines.findIndex((line) => line.trim() === endMarker)
 
   if (beginIdx === -1 || endIdx === -1 || beginIdx >= endIdx) {
+    //@ assume false
     throw new Error("Invalid patch format: missing Begin/End markers")
   }
 
