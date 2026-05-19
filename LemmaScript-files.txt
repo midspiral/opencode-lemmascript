@@ -3,4 +3,4 @@ packages/opencode/src/permission/arity.ts
 packages/opencode/src/permission/index.ts
 packages/opencode/src/util/wildcard.ts
 packages/opencode/src/patch/index.ts
-packages/opencode/src/agent/subagent-permissions.ts --standard-libraries
+packages/opencode/src/agent/subagent-permissions.ts
