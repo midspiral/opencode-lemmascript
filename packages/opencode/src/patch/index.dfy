@@ -60,6 +60,10 @@ function StringTrim(s: string): string
 
 function {:axiom} stripHeredoc(input: string): string
 
+function {:axiom} normalizeUnicode(str: string): string
+
+type Comparator = (string, string) -> bool
+
 datatype ParsePatchHeaderResult = ParsePatchHeaderResult(filePath: string, movePath: Option<string>, nextIdx: int)
 
 datatype ParseUpdateFileChunksResult = ParseUpdateFileChunksResult(chunks: seq<UpdateFileChunk>, nextIdx: int)
@@ -177,8 +181,7 @@ method parseAddFileContent(lines: seq<string>, startIdx: int) returns (res: Pars
 method parsePatch(patchText: string) returns (res: ParsePatchResult)
   requires (|patchText| >= 0)
 {
-  var i_t0 := stripHeredoc(StringTrim(patchText));
-  var cleaned := i_t0;
+  var cleaned := stripHeredoc(StringTrim(patchText));
   var lines := StringSplit(cleaned, "\n");
   var hunks: seq<Hunk> := [];
   var i := 0;
@@ -187,12 +190,7 @@ method parsePatch(patchText: string) returns (res: ParsePatchResult)
   var beginIdx := SeqFindIndex(lines, (line: string) => (StringTrim(line) == beginMarker));
   var endIdx := SeqFindIndex(lines, (line: string) => (StringTrim(line) == endMarker));
   if (((beginIdx == -1) || (endIdx == -1)) || (beginIdx >= endIdx)) {
-    // Hand-added: the TS source throws here on malformed patches. The natural
-    // precondition would require inlining the function's own pipeline
-    // (stripHeredoc + split + findIndex). Localizing the escape here keeps
-    // the proof for valid input meaningful while leaving the malformed case
-    // explicitly out of scope.
-    assume false;
+    assume {:axiom} false;
     assert false;
   }
   i := (beginIdx + 1);
@@ -210,13 +208,13 @@ method parsePatch(patchText: string) returns (res: ParsePatchResult)
     invariant ((coveredCount + skippedCount) == (i - (beginIdx + 1)))
     decreases (|lines| - i)
   {
-    var i_t1 := parsePatchHeader(lines, i);
-    var header := i_t1;
+    var i_t0 := parsePatchHeader(lines, i);
+    var header := i_t0;
     match header {
       case Some(i_header_val) =>
         if (|lines[i]| >= |"*** Add File:"| && lines[i][..|"*** Add File:"|] == "*** Add File:") {
-          var i_t2 := parseAddFileContent(lines, i_header_val.nextIdx);
-          var i_destr0 := i_t2;
+          var i_t1 := parseAddFileContent(lines, i_header_val.nextIdx);
+          var i_destr0 := i_t1;
           var content := i_destr0.content;
           var nextIdx := i_destr0.nextIdx;
           hunkStartIdx := (hunkStartIdx + [i]);
@@ -229,8 +227,8 @@ method parsePatch(patchText: string) returns (res: ParsePatchResult)
           hunks := (hunks + [delete(i_header_val.filePath)]);
           i := i_header_val.nextIdx;
         } else if (|lines[i]| >= |"*** Update File:"| && lines[i][..|"*** Update File:"|] == "*** Update File:") {
-          var i_t3 := parseUpdateFileChunks(lines, i_header_val.nextIdx);
-          var i_destr1 := i_t3;
+          var i_t2 := parseUpdateFileChunks(lines, i_header_val.nextIdx);
+          var i_destr1 := i_t2;
           var chunks := i_destr1.chunks;
           var nextIdx := i_destr1.nextIdx;
           hunkStartIdx := (hunkStartIdx + [i]);
@@ -247,4 +245,90 @@ method parsePatch(patchText: string) returns (res: ParsePatchResult)
     }
   }
   return ParsePatchResult(hunks);
+}
+
+method tryMatch(lines: seq<string>, pattern: seq<string>, startIndex: int, compare: Comparator, eof: bool) returns (res: int)
+  requires (0 <= startIndex)
+  ensures ((res == -1) || (((startIndex <= res) && ((res + |pattern|) <= |lines|)) && forall j: nat :: ((j < |pattern|) ==> compare(lines[(res + j)], pattern[j]))))
+{
+  if eof {
+    var fromEnd := (|lines| - |pattern|);
+    if (fromEnd >= startIndex) {
+      var matches := true;
+      var j := 0;
+      while (j < |pattern|)
+        invariant (0 <= j)
+        invariant (j <= |pattern|)
+        invariant (fromEnd >= 0)
+        invariant ((fromEnd + |pattern|) <= |lines|)
+        invariant ((matches == true) ==> forall k: nat :: ((k < j) ==> compare(lines[(fromEnd + k)], pattern[k])))
+        decreases (|pattern| - j)
+      {
+        var i_t3 := compare(lines[(fromEnd + j)], pattern[j]);
+        if !(i_t3) {
+          matches := false;
+          break;
+        }
+        j := (j + 1);
+      }
+      if matches {
+        return fromEnd;
+      }
+    }
+  }
+  var i := startIndex;
+  while (i <= (|lines| - |pattern|))
+    invariant (startIndex <= i)
+    decreases (|lines| - i)
+  {
+    var matches := true;
+    var j := 0;
+    while (j < |pattern|)
+      invariant (0 <= j)
+      invariant (j <= |pattern|)
+      invariant (0 <= i)
+      invariant ((i + |pattern|) <= |lines|)
+      invariant ((matches == true) ==> forall k: nat :: ((k < j) ==> compare(lines[(i + k)], pattern[k])))
+      decreases (|pattern| - j)
+    {
+      var i_t4 := compare(lines[(i + j)], pattern[j]);
+      if !(i_t4) {
+        matches := false;
+        break;
+      }
+      j := (j + 1);
+    }
+    if matches {
+      return i;
+    }
+    i := (i + 1);
+  }
+  return -1;
+}
+
+method seekSequence(lines: seq<string>, pattern: seq<string>, startIndex: int, eof: bool) returns (res: int)
+  requires (0 <= startIndex)
+  ensures ((res == -1) || ((startIndex <= res) && ((res + |pattern|) <= |lines|)))
+{
+  if (|pattern| == 0) {
+    return -1;
+  }
+  var i_t5 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (a == b), eof);
+  var exact := i_t5;
+  if (exact != -1) {
+    return exact;
+  }
+  var i_t6 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (StringTrimRight(a) == StringTrimRight(b)), eof);
+  var rstrip := i_t6;
+  if (rstrip != -1) {
+    return rstrip;
+  }
+  var i_t7 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (StringTrim(a) == StringTrim(b)), eof);
+  var trim := i_t7;
+  if (trim != -1) {
+    return trim;
+  }
+  var i_t8 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (normalizeUnicode(StringTrim(a)) == normalizeUnicode(StringTrim(b))), eof);
+  var normalized := i_t8;
+  return normalized;
 }

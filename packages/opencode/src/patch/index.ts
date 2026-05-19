@@ -457,6 +457,7 @@ function applyReplacements(lines: string[], replacements: Array<[number, number,
 }
 
 // Normalize Unicode punctuation to ASCII equivalents (like Rust's normalize_unicode)
+//@ extern
 function normalizeUnicode(str: string): string {
   return str
     .replace(/[‘’‚‛]/g, "'") // single quotes
@@ -468,13 +469,20 @@ function normalizeUnicode(str: string): string {
 
 type Comparator = (a: string, b: string) => boolean
 
+//@ verify
 function tryMatch(lines: string[], pattern: string[], startIndex: number, compare: Comparator, eof: boolean): number {
+  //@ requires 0 <= startIndex
+  //@ ensures \result === -1 || (startIndex <= \result && \result + pattern.length <= lines.length && forall(j: nat, j < pattern.length ==> compare(lines[\result + j], pattern[j])))
   // If EOF anchor, try matching from end of file first
   if (eof) {
     const fromEnd = lines.length - pattern.length
     if (fromEnd >= startIndex) {
       let matches = true
       for (let j = 0; j < pattern.length; j++) {
+        //@ invariant 0 <= j && j <= pattern.length
+        //@ invariant fromEnd >= 0 && fromEnd + pattern.length <= lines.length
+        //@ invariant matches === true ==> forall(k: nat, k < j ==> compare(lines[fromEnd + k], pattern[k]))
+        //@ decreases pattern.length - j
         if (!compare(lines[fromEnd + j], pattern[j])) {
           matches = false
           break
@@ -486,8 +494,14 @@ function tryMatch(lines: string[], pattern: string[], startIndex: number, compar
 
   // Forward search from startIndex
   for (let i = startIndex; i <= lines.length - pattern.length; i++) {
+    //@ invariant startIndex <= i
+    //@ decreases lines.length - i
     let matches = true
     for (let j = 0; j < pattern.length; j++) {
+      //@ invariant 0 <= j && j <= pattern.length
+      //@ invariant 0 <= i && i + pattern.length <= lines.length
+      //@ invariant matches === true ==> forall(k: nat, k < j ==> compare(lines[i + k], pattern[k]))
+      //@ decreases pattern.length - j
       if (!compare(lines[i + j], pattern[j])) {
         matches = false
         break
@@ -499,7 +513,10 @@ function tryMatch(lines: string[], pattern: string[], startIndex: number, compar
   return -1
 }
 
+//@ verify
 function seekSequence(lines: string[], pattern: string[], startIndex: number, eof = false): number {
+  //@ requires 0 <= startIndex
+  //@ ensures \result === -1 || (startIndex <= \result && \result + pattern.length <= lines.length)
   if (pattern.length === 0) return -1
 
   // Pass 1: exact match
