@@ -82,15 +82,17 @@ The unified-diff parser used by the `apply_patch` tool, plus the multi-strategy 
 
 All six extract and verify cleanly. Dafny reports 12 procedures verified for the file, counting `SeqFindIndex` / `SeqFindLast` / `StringTrim` / `StringSplit` / `StringTrimLeft` / `StringTrimRight` preambles alongside the six method bodies. `stripHeredoc` and `normalizeUnicode` are `//@ extern` (regex-based, out of LS's verification model).
 
-**Conservation theorem.** All three sub-claims from the candidate doc are now proven via three ghost variables and five loop invariants. The ghosts track each hunk's start position (`hunkStartIdx: seq<int>`) and accumulators for lines consumed by hunks (`coveredCount`) versus lines skipped via the `i++` fallthroughs (`skippedCount`).
+**Conservation loop invariants (not lifted to a function-level theorem).** Three ghost variables and five loop invariants track conservation properties *inside* the parse loop: `hunkStartIdx: seq<int>` records each hunk's start position; `coveredCount` and `skippedCount` accumulate lines consumed by hunks versus skipped via `i++` fallthroughs. They are method-local — `parsePatch` carries no `//@ ensures` exposing them, so callers do not see these properties.
 
-The decisive invariants:
+The invariants:
 
-- `forall k. hunkStartIdx[k] < hunkStartIdx[k+1]` — **hunks in input order** AND **no line assigned to two hunks** (strict monotonicity in one clause).
-- `coveredCount + skippedCount == i - (beginIdx + 1)` — **every line accounted for**. At loop exit, `i == endIdx`, so `coveredCount + skippedCount == endIdx - (beginIdx + 1)`: the total lines in the patch range equal hunk-consumed lines plus skipped lines.
+- `forall k. hunkStartIdx[k] < hunkStartIdx[k+1]` — start indices are strictly increasing, so hunks are produced in input order. Strict monotonicity of *starts* does not by itself entail "no line assigned to two hunks": disjointness of covered ranges would require a separate per-hunk end-index sequence and an invariant `end[k] <= start[k+1]`, which is not in the current proof. (Disjointness does hold operationally — each branch sets `i := nextIdx` so the next iteration begins where the previous hunk ended — but that fact is not captured as a stated invariant over the ghost sequences.)
+- `coveredCount + skippedCount == i - (beginIdx + 1)` — at every loop step, lines in the scanned range partition into hunk-consumed and skipped. At loop exit, `i == endIdx`.
 - `|hunks| <= i - (beginIdx + 1)` — each pushed hunk consumed at least one line.
 
-The line-tracking pattern: each branch that pushes a hunk increments `coveredCount` by `nextIdx - i` (the lines that hunk just owned); each `i++` skip increments `skippedCount` by 1. Maintenance of the count invariant follows mechanically: every iteration advances `i` by exactly the amount added to one of the two accumulators.
+The line-tracking pattern: each branch that pushes a hunk increments `coveredCount` by `nextIdx - i`; each `i++` skip increments `skippedCount` by 1. Maintenance follows mechanically: every iteration advances `i` by exactly the amount added to one accumulator.
+
+**Why these don't lift to `ensures`.** Lifting the conservation properties to function-level postconditions would require either ghost output values (not supported by LemmaScript — ghost state is method-local) or augmenting `Hunk` with start/end fields (changes the production data model — violates in-place verification). Relatedly, the `//@ assume false` on the malformed-patch throw branch is currently irreducible: the natural `requires` would inline the `stripHeredoc/split/findIndex` pipeline, but LemmaScript's spec-annotation tokenizer does not process string escapes — `"\n"` in a `//@ requires` is tokenized as the 2-character literal `\`+`n`, not a newline — so an inline precondition would not connect to the code's `StringSplit(..., "\n")`.
 
 The case study drove a large LS additions list — `StringSplit` / `SeqFindIndex` preambles, optional-field detection on records and discriminated-union variants, nullable-return-type wrapping (`{...} | null` → `Option<T>`), let-statement type-node fallback, asymmetric optional in conditionals, assign auto-wrap-Some, `bool || undefined` / `string || undefined` lowering, negative slice index, truthy-coercion on string ternary conds, extended continue-rewrite (non-trivial then-bodies, while loops). See [Notes for LemmaScript](#notes-for-lemmascript).
 
