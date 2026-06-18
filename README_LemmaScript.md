@@ -2,7 +2,6 @@
 
 [![LemmaScript verified](https://img.shields.io/github/actions/workflow/status/midspiral/opencode-lemmascript/lemmascript.yml?branch=lemmascript&label=LemmaScript%20verified)](https://github.com/midspiral/opencode-lemmascript/actions/workflows/lemmascript.yml)
 
-
 Fork of [anomalyco/opencode](https://github.com/anomalyco/opencode) applying [LemmaScript](https://github.com/midspiral/LemmaScript)'s Dafny backend to opencode's permission system. Annotations are added in-place — function bodies and signatures stay unchanged; everything goes through `//@` comments. Work in progress. [View as diff](https://github.com/midspiral/opencode-lemmascript/compare/dev..lemmascript).
 
 Currently verified: eleven functions, zero errors. The case study drove substantial LemmaScript additions — auto-extern for cross-file calls, spec lifting onto axiom declarations, declare-type aliases, dotted-name fallback, C-style for-loop desugaring, map literals, JS-safe slice, brownfield `//@ verify` extraction with continue-rewrite and function-scoped extern registration, in-file `//@ extern` declarations, array- and object-destructuring with rest at let-statement level, `StringSplit` + `SeqFindIndex` preambles, full nullable-return-type / optional-field / `bool || undefined` / `string || undefined` handling — see [Notes for LemmaScript](#notes-for-lemmascript).
