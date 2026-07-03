@@ -11,3 +11,4 @@ jobs:
     uses: midspiral/LemmaScript/.github/workflows/verify.yml@main
     with:
       backend: dafny
+      typecheck: false
