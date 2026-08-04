@@ -22,6 +22,10 @@ datatype Rule = Rule(permission: string, pattern: string, action: string)
 
 type Ruleset = seq<Rule>
 
+// LemmaScript: skipped Action
+
+// LemmaScript: skipped Rule
+
 // LemmaScript: skipped Ruleset
 
 const EDIT_TOOLS: seq<string> := ["edit", "write", "apply_patch"]
