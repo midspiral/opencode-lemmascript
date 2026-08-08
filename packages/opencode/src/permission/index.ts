@@ -16,9 +16,11 @@ import { PermissionID } from "./schema"
 
 const log = Log.create({ service: "permission" })
 
+//@ skip
 export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionAction" })
 export type Action = Schema.Schema.Type<typeof Action>
 
+//@ skip
 export const Rule = Schema.Struct({
   permission: Schema.String,
   pattern: Schema.String,
@@ -26,6 +28,7 @@ export const Rule = Schema.Struct({
 }).annotate({ identifier: "PermissionRule" })
 export type Rule = Schema.Schema.Type<typeof Rule>
 
+//@ skip
 export const Ruleset = Schema.mutable(Schema.Array(Rule)).annotate({ identifier: "PermissionRuleset" })
 export type Ruleset = Schema.Schema.Type<typeof Ruleset>
 
@@ -131,6 +134,7 @@ export function evaluate(permission: string, pattern: string, ...rulesets: Rules
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Permission") {}
 
+//@ skip
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {

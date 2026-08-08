@@ -571,6 +571,7 @@ function generateUnifiedDiff(oldContent: string, newContent: string): string {
 }
 
 // Apply hunks to filesystem
+//@ skip
 export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* (hunks: Hunk[]) {
   if (hunks.length === 0) {
     return yield* Effect.fail(new Error("No files were modified."))
@@ -621,6 +622,7 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
 })
 
 // Main patch application function
+//@ skip
 export const applyPatch = Effect.fn("Patch.applyPatch")(function* (patchText: string) {
   const { hunks } = parsePatch(patchText)
   return yield* applyHunksToFiles(hunks)
@@ -632,6 +634,7 @@ type MaybeApplyPatchVerifiedResult =
   | { type: MaybeApplyPatchVerified.NotApplyPatch }
 
 // Effectful verified-parse: needs AppFileSystem.Service to read existing files
+//@ skip
 export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatchVerified")(function* (
   argv: string[],
   cwd: string,
