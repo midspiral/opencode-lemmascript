@@ -26,8 +26,8 @@ export function deriveSubagentSessionPermission(input: {
   subagent: Agent.Info
 }): Permission.Ruleset {
   //@ type input SubInput
-  //@ ensures forall(j: nat, j < \result.length ==> !(\result[j].permission === "edit" && \result[j].action === "allow"))
-  //@ ensures input.parentAgent !== undefined ==> forall(i: nat, i < input.parentAgent.permission.length ==> (input.parentAgent.permission[i].action === "deny" && input.parentAgent.permission[i].permission === "edit") ==> exists(j: nat, j < \result.length && \result[j] === input.parentAgent.permission[i]))
+  //@ ensures forall((j: nat) => implies(j < $result.length, !($result[j].permission === "edit" && $result[j].action === "allow")))
+  //@ ensures implies(input.parentAgent !== undefined, forall((i: nat) => implies(i < input.parentAgent.permission.length, implies(input.parentAgent.permission[i].action === "deny" && input.parentAgent.permission[i].permission === "edit", exists((j: nat) => j < $result.length && $result[j] === input.parentAgent.permission[i])))))
   const canTask = input.subagent.permission.some((rule) => rule.permission === "task")
   const canTodo = input.subagent.permission.some((rule) => rule.permission === "todowrite")
   const parentAgentDenies =

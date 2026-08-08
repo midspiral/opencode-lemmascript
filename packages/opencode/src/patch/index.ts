@@ -76,9 +76,9 @@ function parsePatchHeader(
   startIdx: number,
 ): { filePath: string; movePath?: string; nextIdx: number } | null {
   //@ requires 0 <= startIdx && startIdx < lines.length
-  //@ ensures \result !== undefined ==> \result.nextIdx >= startIdx + 1
-  //@ ensures \result !== undefined ==> \result.nextIdx <= startIdx + 2
-  //@ ensures \result !== undefined ==> \result.nextIdx <= lines.length
+  //@ ensures implies($result !== undefined, $result.nextIdx >= startIdx + 1)
+  //@ ensures implies($result !== undefined, $result.nextIdx <= startIdx + 2)
+  //@ ensures implies($result !== undefined, $result.nextIdx <= lines.length)
   const line = lines[startIdx]
 
   if (line.startsWith("*** Add File:")) {
@@ -111,7 +111,7 @@ function parsePatchHeader(
 //@ verify
 function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: UpdateFileChunk[]; nextIdx: number } {
   //@ requires 0 <= startIdx && startIdx <= lines.length
-  //@ ensures startIdx <= \result.nextIdx && \result.nextIdx <= lines.length
+  //@ ensures startIdx <= $result.nextIdx && $result.nextIdx <= lines.length
   const chunks: UpdateFileChunk[] = []
   let i = startIdx
 
@@ -172,7 +172,7 @@ function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: Upd
 //@ verify
 function parseAddFileContent(lines: string[], startIdx: number): { content: string; nextIdx: number } {
   //@ requires 0 <= startIdx && startIdx <= lines.length
-  //@ ensures startIdx <= \result.nextIdx && \result.nextIdx <= lines.length
+  //@ ensures startIdx <= $result.nextIdx && $result.nextIdx <= lines.length
   let content = ""
   let i = startIdx
 
@@ -234,8 +234,8 @@ export function parsePatch(patchText: string): { hunks: Hunk[] } {
     //@ invariant endIdx < lines.length
     //@ invariant hunkStartIdx.length === hunks.length
     //@ invariant hunks.length <= i - (beginIdx + 1)
-    //@ invariant forall(k: nat, k < hunkStartIdx.length ==> beginIdx + 1 <= hunkStartIdx[k] && hunkStartIdx[k] < i)
-    //@ invariant forall(k: nat, k + 1 < hunkStartIdx.length ==> hunkStartIdx[k] < hunkStartIdx[k + 1])
+    //@ invariant forall((k: nat) => implies(k < hunkStartIdx.length, beginIdx + 1 <= hunkStartIdx[k] && hunkStartIdx[k] < i))
+    //@ invariant forall((k: nat) => implies(k + 1 < hunkStartIdx.length, hunkStartIdx[k] < hunkStartIdx[k + 1]))
     //@ invariant coveredCount + skippedCount === i - (beginIdx + 1)
     //@ decreases lines.length - i
     const header = parsePatchHeader(lines, i)
@@ -473,7 +473,7 @@ type Comparator = (a: string, b: string) => boolean
 //@ verify
 function tryMatch(lines: string[], pattern: string[], startIndex: number, compare: Comparator, eof: boolean): number {
   //@ requires 0 <= startIndex
-  //@ ensures \result === -1 || (startIndex <= \result && \result + pattern.length <= lines.length && forall(j: nat, j < pattern.length ==> compare(lines[\result + j], pattern[j])))
+  //@ ensures $result === -1 || startIndex <= $result && $result + pattern.length <= lines.length && forall((j: nat) => implies(j < pattern.length, compare(lines[$result + j], pattern[j])))
   // If EOF anchor, try matching from end of file first
   if (eof) {
     const fromEnd = lines.length - pattern.length
@@ -482,7 +482,7 @@ function tryMatch(lines: string[], pattern: string[], startIndex: number, compar
       for (let j = 0; j < pattern.length; j++) {
         //@ invariant 0 <= j && j <= pattern.length
         //@ invariant fromEnd >= 0 && fromEnd + pattern.length <= lines.length
-        //@ invariant matches === true ==> forall(k: nat, k < j ==> compare(lines[fromEnd + k], pattern[k]))
+        //@ invariant implies(matches === true, forall((k: nat) => implies(k < j, compare(lines[fromEnd + k], pattern[k]))))
         //@ decreases pattern.length - j
         if (!compare(lines[fromEnd + j], pattern[j])) {
           matches = false
@@ -501,7 +501,7 @@ function tryMatch(lines: string[], pattern: string[], startIndex: number, compar
     for (let j = 0; j < pattern.length; j++) {
       //@ invariant 0 <= j && j <= pattern.length
       //@ invariant 0 <= i && i + pattern.length <= lines.length
-      //@ invariant matches === true ==> forall(k: nat, k < j ==> compare(lines[i + k], pattern[k]))
+      //@ invariant implies(matches === true, forall((k: nat) => implies(k < j, compare(lines[i + k], pattern[k]))))
       //@ decreases pattern.length - j
       if (!compare(lines[i + j], pattern[j])) {
         matches = false
@@ -517,7 +517,7 @@ function tryMatch(lines: string[], pattern: string[], startIndex: number, compar
 //@ verify
 function seekSequence(lines: string[], pattern: string[], startIndex: number, eof = false): number {
   //@ requires 0 <= startIndex
-  //@ ensures \result === -1 || (startIndex <= \result && \result + pattern.length <= lines.length)
+  //@ ensures $result === -1 || startIndex <= $result && $result + pattern.length <= lines.length
   if (pattern.length === 0) return -1
 
   // Pass 1: exact match

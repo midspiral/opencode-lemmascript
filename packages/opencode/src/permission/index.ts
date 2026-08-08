@@ -300,14 +300,14 @@ const EDIT_TOOLS = ["edit", "write", "apply_patch"]
 
 //@ verify
 export function disabled(tools: string[], ruleset: Ruleset): Set<string> {
-  //@ ensures forall(t: string, \result.has(t) ==> tools.includes(t))
-  //@ ensures forall(i: nat, i < tools.length ==> \result.has(tools[i]) ==> exists(k: nat, k < ruleset.length && Wildcard.match((EDIT_TOOLS.includes(tools[i]) ? "edit" : tools[i]), ruleset[k].permission) && ruleset[k].pattern === "*" && ruleset[k].action === "deny" && forall(m: nat, k < m && m < ruleset.length ==> !Wildcard.match((EDIT_TOOLS.includes(tools[i]) ? "edit" : tools[i]), ruleset[m].permission))))
-  //@ ensures forall(i: nat, i < tools.length ==> (exists(k: nat, k < ruleset.length && Wildcard.match((EDIT_TOOLS.includes(tools[i]) ? "edit" : tools[i]), ruleset[k].permission) && ruleset[k].pattern === "*" && ruleset[k].action === "deny" && forall(m: nat, k < m && m < ruleset.length ==> !Wildcard.match((EDIT_TOOLS.includes(tools[i]) ? "edit" : tools[i]), ruleset[m].permission))) ==> \result.has(tools[i])))
+  //@ ensures forall((t: string) => implies($result.has(t), tools.includes(t)))
+  //@ ensures forall((i: nat) => implies(i < tools.length, implies($result.has(tools[i]), exists((k: nat) => k < ruleset.length && Wildcard.match(EDIT_TOOLS.includes(tools[i]) ? "edit" : tools[i], ruleset[k].permission) && ruleset[k].pattern === "*" && ruleset[k].action === "deny" && forall((m: nat) => implies(k < m && m < ruleset.length, !Wildcard.match(EDIT_TOOLS.includes(tools[i]) ? "edit" : tools[i], ruleset[m].permission)))))))
+  //@ ensures forall((i: nat) => implies(i < tools.length, implies(exists((k: nat) => k < ruleset.length && Wildcard.match(EDIT_TOOLS.includes(tools[i]) ? "edit" : tools[i], ruleset[k].permission) && ruleset[k].pattern === "*" && ruleset[k].action === "deny" && forall((m: nat) => implies(k < m && m < ruleset.length, !Wildcard.match(EDIT_TOOLS.includes(tools[i]) ? "edit" : tools[i], ruleset[m].permission)))), $result.has(tools[i]))))
   const result = new Set<string>()
   for (const tool of tools) {
-    //@ invariant forall(t: string, result.has(t) ==> exists(j: nat, j < _tool_idx && tools[j] === t))
-    //@ invariant forall(j: nat, j < _tool_idx ==> result.has(tools[j]) ==> exists(k: nat, k < ruleset.length && Wildcard.match((EDIT_TOOLS.includes(tools[j]) ? "edit" : tools[j]), ruleset[k].permission) && ruleset[k].pattern === "*" && ruleset[k].action === "deny" && forall(m: nat, k < m && m < ruleset.length ==> !Wildcard.match((EDIT_TOOLS.includes(tools[j]) ? "edit" : tools[j]), ruleset[m].permission))))
-    //@ invariant forall(j: nat, j < _tool_idx ==> (exists(k: nat, k < ruleset.length && Wildcard.match((EDIT_TOOLS.includes(tools[j]) ? "edit" : tools[j]), ruleset[k].permission) && ruleset[k].pattern === "*" && ruleset[k].action === "deny" && forall(m: nat, k < m && m < ruleset.length ==> !Wildcard.match((EDIT_TOOLS.includes(tools[j]) ? "edit" : tools[j]), ruleset[m].permission))) ==> result.has(tools[j])))
+    //@ invariant forall((t: string) => implies(result.has(t), exists((j: nat) => j < _tool_idx && tools[j] === t)))
+    //@ invariant forall((j: nat) => implies(j < _tool_idx, implies(result.has(tools[j]), exists((k: nat) => k < ruleset.length && Wildcard.match(EDIT_TOOLS.includes(tools[j]) ? "edit" : tools[j], ruleset[k].permission) && ruleset[k].pattern === "*" && ruleset[k].action === "deny" && forall((m: nat) => implies(k < m && m < ruleset.length, !Wildcard.match(EDIT_TOOLS.includes(tools[j]) ? "edit" : tools[j], ruleset[m].permission)))))))
+    //@ invariant forall((j: nat) => implies(j < _tool_idx, implies(exists((k: nat) => k < ruleset.length && Wildcard.match(EDIT_TOOLS.includes(tools[j]) ? "edit" : tools[j], ruleset[k].permission) && ruleset[k].pattern === "*" && ruleset[k].action === "deny" && forall((m: nat) => implies(k < m && m < ruleset.length, !Wildcard.match(EDIT_TOOLS.includes(tools[j]) ? "edit" : tools[j], ruleset[m].permission)))), result.has(tools[j]))))
     const permission = EDIT_TOOLS.includes(tool) ? "edit" : tool
     const rule = ruleset.findLast((rule) => Wildcard.match(permission, rule.permission))
     if (!rule) continue

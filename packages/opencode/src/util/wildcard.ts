@@ -47,14 +47,14 @@ export function allStructured(input: { head: string; tail: string[] }, patterns:
 
 //@ verify
 function matchSequence(items: string[], patterns: string[]): boolean {
-  //@ ensures \result ==> Matches(items, patterns)
-  //@ ensures Matches(items, patterns) ==> \result
+  //@ ensures implies($result, Matches(items, patterns))
+  //@ ensures implies(Matches(items, patterns), $result)
   if (patterns.length === 0) return true
   const [pattern, ...rest] = patterns
   if (pattern === "*") return matchSequence(items, rest)
   for (let i = 0; i < items.length; i++) {
     //@ invariant 0 <= i && i <= items.length
-    //@ invariant forall(j: nat, j < i ==> !(match(items[j], pattern) && Matches(items.slice(j+1), rest)))
+    //@ invariant forall((j: nat) => implies(j < i, !(match(items[j], pattern) && Matches(items.slice(j + 1), rest))))
     //@ decreases items.length - i
     if (match(items[i], pattern) && matchSequence(items.slice(i + 1), rest)) {
       return true
