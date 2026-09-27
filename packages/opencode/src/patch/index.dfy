@@ -274,8 +274,7 @@ method tryMatch(lines: seq<string>, pattern: seq<string>, startIndex: int, compa
         invariant ((matches == true) ==> forall k: nat :: ((k < j) ==> compare(lines[(fromEnd + k)], pattern[k])))
         decreases (|pattern| - j)
       {
-        var i_t3 := compare(lines[(fromEnd + j)], pattern[j]);
-        if !(i_t3) {
+        if !(compare(lines[(fromEnd + j)], pattern[j])) {
           matches := false;
           break;
         }
@@ -301,8 +300,7 @@ method tryMatch(lines: seq<string>, pattern: seq<string>, startIndex: int, compa
       invariant ((matches == true) ==> forall k: nat :: ((k < j) ==> compare(lines[(i + k)], pattern[k])))
       decreases (|pattern| - j)
     {
-      var i_t4 := compare(lines[(i + j)], pattern[j]);
-      if !(i_t4) {
+      if !(compare(lines[(i + j)], pattern[j])) {
         matches := false;
         break;
       }
@@ -323,22 +321,22 @@ method seekSequence(lines: seq<string>, pattern: seq<string>, startIndex: int, e
   if (|pattern| == 0) {
     return -1;
   }
-  var i_t5 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (a == b), eof);
-  var exact := i_t5;
+  var i_t3 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (a == b), eof);
+  var exact := i_t3;
   if (exact != -1) {
     return exact;
   }
-  var i_t6 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (StringTrimRight(a) == StringTrimRight(b)), eof);
-  var rstrip := i_t6;
+  var i_t4 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (StringTrimRight(a) == StringTrimRight(b)), eof);
+  var rstrip := i_t4;
   if (rstrip != -1) {
     return rstrip;
   }
-  var i_t7 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (StringTrim(a) == StringTrim(b)), eof);
-  var trim := i_t7;
+  var i_t5 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (StringTrim(a) == StringTrim(b)), eof);
+  var trim := i_t5;
   if (trim != -1) {
     return trim;
   }
-  var i_t8 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (normalizeUnicode(StringTrim(a)) == normalizeUnicode(StringTrim(b))), eof);
-  var normalized := i_t8;
+  var i_t6 := tryMatch(lines, pattern, startIndex, (a: string, b: string) => (normalizeUnicode(StringTrim(a)) == normalizeUnicode(StringTrim(b))), eof);
+  var normalized := i_t6;
   return normalized;
 }
