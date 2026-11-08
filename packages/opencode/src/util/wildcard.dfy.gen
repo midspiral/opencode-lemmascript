@@ -22,8 +22,12 @@ method matchSequence(items: seq<string>, patterns: seq<string>) returns (res: bo
     invariant forall j: nat :: ((j < i) ==> !((match_(items[j], pattern) && Matches(items[(j + 1)..], rest))))
     decreases (|items| - i)
   {
-    var i_t1 := matchSequence(items[(i + 1)..], rest);
-    if (match_(items[i], pattern) && i_t1) {
+    var i_branch0 := match_(items[i], pattern);
+    if i_branch0 {
+      var i_t1 := matchSequence(items[(i + 1)..], rest);
+      i_branch0 := i_t1;
+    }
+    if i_branch0 {
       return true;
     }
     i := (i + 1);
