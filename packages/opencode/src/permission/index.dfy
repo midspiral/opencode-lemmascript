@@ -39,7 +39,7 @@ method disabled(tools: seq<string>, ruleset: seq<Rule>) returns (res: set<string
   {
     var tool := tools[i_tool_idx];
     var permission := (if (tool in EDIT_TOOLS) then "edit" else tool);
-    var rule := SeqFindLast(ruleset, (rule: Rule) => Wildcard_match(permission, rule.permission));
+    var rule := SeqFindLast(ruleset, (rule_2: Rule) => Wildcard_match(permission, rule_2.permission));
     match rule {
       case Some(i_rule_val) =>
         if ((i_rule_val.pattern == "*") && (i_rule_val.action == "deny")) {

@@ -35,9 +35,9 @@ method prefix(tokens: seq<string>) returns (res: seq<string>)
   var len := |tokens|;
   while (len > 0)
   {
-    var prefix := SeqJoin(SafeSlice(tokens, 0, len), " ");
-    if (prefix in ARITY) {
-      var i_arity_val := ARITY[prefix];
+    var prefix_2 := SeqJoin(SafeSlice(tokens, 0, len), " ");
+    if (prefix_2 in ARITY) {
+      var i_arity_val := ARITY[prefix_2];
       return SafeSlice(tokens, 0, i_arity_val);
     }
     len := (len - 1);
