@@ -76,9 +76,9 @@ function parsePatchHeader(
   startIdx: number,
 ): { filePath: string; movePath?: string; nextIdx: number } | null {
   //@ requires 0 <= startIdx && startIdx < lines.length
-  //@ ensures \result !== undefined ==> \result.nextIdx >= startIdx + 1
-  //@ ensures \result !== undefined ==> \result.nextIdx <= startIdx + 2
-  //@ ensures \result !== undefined ==> \result.nextIdx <= lines.length
+  //@ ensures \result !== null ==> \result.nextIdx >= startIdx + 1
+  //@ ensures \result !== null ==> \result.nextIdx <= startIdx + 2
+  //@ ensures \result !== null ==> \result.nextIdx <= lines.length
   const line = lines[startIdx]
 
   if (line.startsWith("*** Add File:")) {
